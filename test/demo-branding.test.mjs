@@ -10,7 +10,9 @@ test("a fresh deploy starts as the massage demo", () => {
 
   assert.equal(defaults().name, "Miester's Massage Spa");
   assert.match(defaults().info, /deep tissue/i);
-  assert.match(defaults().info, /sixty or ninety minutes/i);
+  // The agent must never invent a price, so the seeded info has to carry real ones.
+  assert.match(defaults().info, /\$\d+/);
+  assert.match(defaults().info, /cancellation/i);
 });
 
 test("business details are editable, not hardcoded in the page", async () => {

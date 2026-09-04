@@ -1,11 +1,4 @@
-import { getStore } from "@netlify/blobs";
-
-const store = () => getStore("config");
-const KEY = "business";
-
-// Seed content for the demo. Editing the settings panel on the site overrides all of it,
-// so this is only what a brand new deploy starts with.
-const DEMO_INFO = `Miester's Massage Spa — 1420 North Canyon Road, Provo, Utah.
+Miester's Massage Spa — 1420 North Canyon Road, Provo, Utah.
 
 WHAT WE DO
 Swedish massage — relaxation, light to medium pressure. 60 min $85, 90 min $120.
@@ -78,24 +71,4 @@ with a sheet the entire time. Only the area being worked on is uncovered.
 should tell the therapist to ease up any time.
 "How often should I come?" — Most regular clients come every two to four weeks.
 "Can I bring my kid?" — There is no childcare and the studio is a quiet space.
-"Do you do gift certificates?" — Yes, any amount, they never expire.`;
-
-export const defaults = () => ({
-  name: process.env.BUSINESS_NAME || "Miester's Massage Spa",
-  info: process.env.BUSINESS_INFO || DEMO_INFO,
-});
-
-export async function getConfig() {
-  const saved = await store().get(KEY, { type: "json", consistency: "strong" });
-  return { ...defaults(), ...(saved || {}) };
-}
-
-export async function setConfig({ name, info }) {
-  const next = {
-    name: String(name || "").trim().slice(0, 100) || defaults().name,
-    info: String(info || "").trim().slice(0, 12000),
-    updated_at: new Date().toISOString(),
-  };
-  await store().setJSON(KEY, next);
-  return next;
-}
+"Do you do gift certificates?" — Yes, any amount, they never expire.
