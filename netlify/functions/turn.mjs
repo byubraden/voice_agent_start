@@ -3,7 +3,7 @@ import { loadSession, saveSession } from "../../lib/store.mjs";
 import { finalize } from "../../lib/finalize.mjs";
 import { ask, sayAndHangUp, formData } from "../../lib/twiml.mjs";
 
-export default async (req, context) => {
+export default async (req) => {
   const form = await formData(req);
   const callSid = form.get("CallSid");
   const speech = (form.get("SpeechResult") || "").trim();
@@ -37,11 +37,16 @@ export default async (req, context) => {
 
   if (!done) return ask(reply);
 
-  // Write the record ourselves rather than relying on the status webhook being
-  // configured. waitUntil lets the caller hear the goodbye while this runs.
-  const saving = finalize(callSid, session, { from: form.get("From") || "" });
-  if (context?.waitUntil) context.waitUntil(saving);
-  else await saving;
+  // Save before responding. waitUntil looks like the right tool here, but the
+  // function is frozen once it returns, so the write never lands and the call is
+  // lost unless the caller happens to hang up first. The extra second before the
+  // caller hears goodbye is worth not dropping records.
+  await finalize(callSid, session, {
+    from: form.get("From") || "",
+    duration: session.started_at
+      ? Math.round((Date.now() - new Date(session.started_at)) / 1000)
+      : 0,
+  });
 
   return sayAndHangUp(reply);
 };
