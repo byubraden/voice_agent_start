@@ -27,3 +27,21 @@ test("requests with no resolvable time are surfaced, not dropped", async () => {
   assert.match(html, /id="calUnscheduled"/);
   assert.match(html, /Needs a real time/i);
 });
+
+test("calendar can be subscribed to, not just exported once", async () => {
+  const html = await page();
+
+  assert.match(html, /calendar\.ics/);
+  // webcal:// makes Google treat it as a live subscription instead of a one-time
+  // import, which is the whole point — later calls have to keep flowing in.
+  assert.match(html, /webcal:/);
+});
+
+test("clicking an event opens a closable detail modal", async () => {
+  const html = await page();
+
+  assert.match(html, /function openEvent/);
+  assert.match(html, /aria-modal="true"/);
+  assert.match(html, /aria-label="Close"/);
+  assert.match(html, /Escape/);
+});

@@ -143,6 +143,29 @@
   .unscheduled { padding: 12px 16px; border-top: 1px solid var(--line); }
   .unscheduled h3 { font-size: 13px; margin: 0 0 8px; }
   .chip { display: inline-block; border: 1px solid var(--line); background: var(--soft); border-radius: 99px; padding: 5px 11px; font-size: 12px; margin: 0 6px 6px 0; }
+
+  .subwrap { position: relative; }
+  .menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 5; min-width: 210px;
+          background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+          box-shadow: 0 12px 28px rgba(0,0,0,.14); padding: 6px; }
+  .menu button { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 9px 10px; border-radius: 6px; font-weight: 500; }
+  .menu button:hover { background: var(--wash); }
+  .menu .note { color: var(--muted); font-size: 12px; padding: 6px 10px 8px; border-top: 1px solid var(--line); margin-top: 4px; }
+
+  .modal-back { position: fixed; inset: 0; background: rgba(20,24,22,.42); display: grid; place-items: center; z-index: 20; padding: 20px; }
+  .modal { background: var(--panel); border-radius: 10px; border: 1px solid var(--line);
+           box-shadow: 0 20px 50px rgba(0,0,0,.25); width: min(400px, 100%); overflow: hidden; }
+  .modal header { display: flex; align-items: flex-start; gap: 12px; padding: 15px 16px; border-bottom: 1px solid var(--line); }
+  .modal header div { min-width: 0; }
+  .modal h3 { margin: 0; font-size: 16px; }
+  .modal .sub2 { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .modal .x { margin-left: auto; border: 0; background: transparent; font-size: 19px; line-height: 1; padding: 2px 7px; color: var(--muted); }
+  .modal .x:hover { background: var(--wash); }
+  .modal dl { margin: 0; padding: 14px 16px; display: grid; grid-template-columns: 84px 1fr; gap: 8px 12px; font-size: 13px; }
+  .modal dt { color: var(--muted); }
+  .modal dd { margin: 0; }
+  .modal .foot { padding: 12px 16px; border-top: 1px solid var(--line); display: flex; gap: 10px; flex-wrap: wrap; }
+  .tentative-tag { display: inline-block; background: var(--soft); border: 1px solid var(--line); color: var(--accent-2); border-radius: 99px; padding: 2px 9px; font-size: 11px; font-weight: 700; }
   @media (max-width: 840px) {
     .bar { padding: 0 16px; }
     main { padding: 20px 14px; }
@@ -205,6 +228,7 @@
 
       <div class="row">
         <button class="primary" id="save">Save</button>
+        <button id="clear">Delete all call records</button>
         <span class="save-status" id="status"></span>
       </div>
     </section>
@@ -233,6 +257,14 @@
           <button id="calNext" aria-label="Next week">&rsaquo;</button>
         </div>
         <span class="range" id="calRange"></span>
+        <div class="subwrap">
+          <button id="subBtn">Subscribe to calendar</button>
+          <div class="menu" id="subMenu" hidden>
+            <button id="subGoogle">Add to Google Calendar</button>
+            <button id="subCopy">Copy iCal URL</button>
+            <div class="note">Subscribing keeps updating on its own as new calls come in.</div>
+          </div>
+        </div>
         <span class="spacer">Times the caller asked for. Nothing here is confirmed.</span>
       </div>
       <div class="week"><div class="weekgrid" id="calGrid"></div></div>
@@ -301,6 +333,28 @@ $("save").onclick = async () => {
     try { localStorage.setItem("pw", $("pw").value); } catch {}
     status.textContent = "Saved. Live on the next call.";
     $("brandName").textContent = body.name || "Scheduling";
+  } else {
+    status.className = "save-status err";
+    status.textContent = body.error || `Failed (${res.status})`;
+  }
+};
+
+$("clear").onclick = async () => {
+  if (!window.confirm("Delete every call record and transcript? This cannot be undone.")) return;
+
+  const status = $("status");
+  status.className = "save-status";
+  status.textContent = "Deleting...";
+
+  const res = await fetch("/api/calls", {
+    method: "DELETE",
+    headers: { "x-admin-password": $("pw").value },
+  });
+  const body = await res.json().catch(() => ({}));
+
+  if (res.ok) {
+    status.textContent = `Deleted ${body.removed} record${body.removed === 1 ? "" : "s"}.`;
+    loadCalls();
   } else {
     status.className = "save-status err";
     status.textContent = body.error || `Failed (${res.status})`;
@@ -441,7 +495,7 @@ function renderSchedule() {
       const mins = (when.getHours() - DAY_START) * 60 + when.getMinutes();
       const height = (Number(call.duration_minutes) || 60) / 60 * HOUR_PX;
       if (mins < 0 || when.getHours() >= DAY_END) continue;
-      html += `<div class="event${call.booked ? "" : " tentative"}"
+      html += `<div class="event${call.booked ? "" : " tentative"}" data-event="${esc(call.id)}"
         style="top:${(mins / 60) * HOUR_PX}px;height:${Math.max(height, 26)}px"
         title="${esc(call.caller_name || "Unknown")} — ${esc(call.service || "massage")} — ${esc(call.appointment || "")}">
         <b>${when.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</b>
@@ -451,6 +505,11 @@ function renderSchedule() {
   }
 
   $("calGrid").innerHTML = html;
+
+  $("calGrid").querySelectorAll("[data-event]").forEach((el) => {
+    const call = latestCalls.find((c) => String(c.id) === el.dataset.event);
+    if (call) el.onclick = () => openEvent(call);
+  });
 
   const loose = latestCalls.filter(
     (c) => (c.appointment || c.booked) && !(c.appointment_iso && !Number.isNaN(new Date(c.appointment_iso).getTime()))
@@ -468,6 +527,79 @@ function showView(which) {
   $("tabSchedule").setAttribute("aria-selected", String(schedule));
   $("tabRequests").setAttribute("aria-selected", String(!schedule));
   if (schedule) renderSchedule();
+}
+
+// ---- Subscribe menu ------------------------------------------------------
+const icsUrl = () => `${location.origin}/calendar.ics`;
+
+$("subBtn").onclick = (e) => { e.stopPropagation(); $("subMenu").hidden = !$("subMenu").hidden; };
+document.addEventListener("click", () => { $("subMenu").hidden = true; });
+$("subMenu").onclick = (e) => e.stopPropagation();
+
+$("subGoogle").onclick = () => {
+  // Google subscribes to a feed by URL; webcal:// makes it treat this as a subscription
+  // rather than a one-time import, so later calls keep flowing in.
+  window.open(
+    `https://calendar.google.com/calendar/r?cid=${encodeURIComponent(icsUrl().replace(/^https?:/, "webcal:"))}`,
+    "_blank", "noopener"
+  );
+  $("subMenu").hidden = true;
+};
+
+$("subCopy").onclick = async () => {
+  const btn = $("subCopy");
+  try {
+    await navigator.clipboard.writeText(icsUrl());
+    btn.textContent = "Copied";
+  } catch {
+    // Clipboard is blocked in some browsers unless the page is focused; show it instead.
+    window.prompt("Copy this calendar URL", icsUrl());
+    btn.textContent = "Copy iCal URL";
+    return;
+  }
+  setTimeout(() => { btn.textContent = "Copy iCal URL"; }, 1500);
+};
+
+// ---- Event detail modal --------------------------------------------------
+function openEvent(call) {
+  const when = new Date(call.appointment_iso);
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  back.innerHTML = `
+    <div class="modal" role="dialog" aria-modal="true">
+      <header>
+        <div>
+          <h3>${esc(call.caller_name || "Unknown caller")}</h3>
+          <div class="sub2">${esc(call.service || "Massage appointment")}</div>
+        </div>
+        <button class="x" aria-label="Close">&times;</button>
+      </header>
+      <dl>
+        <dt>When</dt><dd>${when.toLocaleString([], { weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</dd>
+        <dt>Length</dt><dd>${Number(call.duration_minutes) || 60} minutes</dd>
+        <dt>Phone</dt><dd>${esc(call.callback || call.from || "not provided")}</dd>
+        <dt>Asked for</dt><dd>${esc(call.appointment || "not provided")}</dd>
+        <dt>Status</dt><dd><span class="tentative-tag">Not confirmed</span></dd>
+        <dt>Summary</dt><dd>${esc(call.summary || "No summary captured.")}</dd>
+      </dl>
+      <div class="foot">
+        <button class="primary" data-gcal>Add to Google Calendar</button>
+        <button data-close>Close</button>
+      </div>
+    </div>`;
+
+  const close = () => { back.remove(); document.removeEventListener("keydown", onKey); };
+  const onKey = (e) => { if (e.key === "Escape") close(); };
+
+  back.querySelector(".x").onclick = close;
+  back.querySelector("[data-close]").onclick = close;
+  back.onclick = (e) => { if (e.target === back) close(); };
+  back.querySelector("[data-gcal]").onclick = () => {
+    const url = calendarUrl(call, call.appointment_iso, call.duration_minutes || 60);
+    if (url) window.open(url, "_blank", "noopener");
+  };
+  document.addEventListener("keydown", onKey);
+  document.body.appendChild(back);
 }
 
 $("tabSchedule").onclick = () => showView("schedule");

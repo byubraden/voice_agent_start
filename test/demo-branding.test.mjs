@@ -34,3 +34,11 @@ test("call log page is positioned as a scheduling dashboard", async () => {
   assert.match(html, /Avg\. Call/i);
   assert.match(html, /Auto-refresh/i);
 });
+
+test("wiping call records requires the admin password", async () => {
+  const fn = await readFile(new URL("../netlify/functions/calls.mjs", import.meta.url), "utf8");
+
+  assert.match(fn, /DELETE/);
+  assert.match(fn, /ADMIN_PASSWORD/);
+  assert.match(fn, /x-admin-password/);
+});
