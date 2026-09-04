@@ -23,13 +23,23 @@ export default async (req) => {
     session.failures = 0;
   } catch (err) {
     console.error("agent turn failed", err);
-    // Don't hang up on one bad response — ask the caller to repeat and try again.
-    // Two in a row means something is actually broken, so end the call politely.
+    // A caller one word away from booking was once told "I'm having trouble, goodbye"
+    // after two hiccups. Hang up only when the call is clearly unrecoverable, and
+    // re-ask the actual question rather than a generic apology the caller can't act on.
     session.failures = (session.failures || 0) + 1;
-    done = session.failures >= 2;
+    done = session.failures >= 4;
+
+    const asked = [...session.history]
+      .reverse()
+      .find((m) => m.role === "assistant" && m.content.includes("?"));
+    // Just the final question sentence, not the whole previous reply.
+    const question = asked?.content.match(/[^.!?]*\?/g)?.pop()?.trim();
+
     reply = done
-      ? "I am sorry, I am having trouble with my system. Please call back in a few minutes. Goodbye."
-      : "Sorry, I missed that. Could you say it again?";
+      ? "I am sorry, my system is not cooperating. Please call back in a few minutes. Goodbye."
+      : question
+        ? `Sorry, I didn't catch that. ${question}`
+        : "Sorry, I didn't catch that. What can I help you with?";
   }
 
   session.history.push({ role: "assistant", content: reply });
