@@ -1,30 +1,19 @@
-import { extractOutcome } from "../../lib/agent.mjs";
-import { loadSession, finalizeCall, isFinalized } from "../../lib/store.mjs";
+import { loadSession } from "../../lib/store.mjs";
+import { finalize } from "../../lib/finalize.mjs";
 import { formData } from "../../lib/twiml.mjs";
 
+// Backup path: catches calls where the caller hung up before the agent finished.
+// A normal goodbye is already saved by /turn, and finalize() ignores duplicates.
 export default async (req) => {
   const form = await formData(req);
   const callSid = form.get("CallSid");
 
   if (form.get("CallStatus") !== "completed") return new Response("ok");
-  if (await isFinalized(callSid)) return new Response("ok");
 
   const session = await loadSession(callSid);
-  let outcome = { caller_name: "", service: "", appointment: "", summary: "", booked: false };
-  try {
-    outcome = await extractOutcome(session.history);
-  } catch (err) {
-    console.error("extraction failed", err);
-    outcome.summary = "Call ended, but the summary could not be generated.";
-  }
-
-  await finalizeCall(callSid, {
-    id: callSid,
-    from: session.from || form.get("From") || "",
-    ended_at: new Date().toISOString(),
-    duration_seconds: Number(form.get("CallDuration") || 0),
-    transcript: session.history,
-    ...outcome,
+  await finalize(callSid, session, {
+    duration: form.get("CallDuration"),
+    from: form.get("From") || "",
   });
 
   return new Response("ok");

@@ -5,16 +5,31 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Call Log</title>
 <style>
-  :root { color-scheme: light dark; --line: #d9d9de; --muted: #6b7280; }
+  :root { color-scheme: light dark; --line: #d9d9de; --muted: #6b7280; --accent: #2563eb; }
   body { font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 32px 20px; max-width: 760px; }
-  h1 { font-size: 20px; margin: 0 0 4px; }
-  .sub { color: var(--muted); margin: 0 0 28px; }
+  h1 { font-size: 20px; margin: 0; }
+  .head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .sub { color: var(--muted); margin: 4px 0 24px; }
+  button { font: inherit; cursor: pointer; border-radius: 6px; border: 1px solid var(--line);
+           background: transparent; color: inherit; padding: 6px 12px; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  .panel { border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 24px; }
+  .panel label { display: block; font-weight: 600; margin: 12px 0 4px; }
+  .panel label:first-of-type { margin-top: 0; }
+  .panel input, .panel textarea { width: 100%; box-sizing: border-box; font: inherit;
+    padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: inherit; }
+  .panel textarea { min-height: 130px; resize: vertical; }
+  .hint { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+  .row { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+  .status { font-size: 13px; }
+  .status.err { color: #dc2626; }
+
   .call { border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
   .top { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; }
   .name { font-weight: 600; }
   .when { color: var(--muted); font-size: 13px; }
   .appt { margin: 10px 0; padding: 8px 12px; border-radius: 6px; background: rgba(127,127,127,.12); }
-  .appt b { font-weight: 600; }
   .none { color: var(--muted); font-style: italic; }
   details { margin-top: 10px; }
   summary { cursor: pointer; color: var(--muted); font-size: 13px; }
@@ -23,17 +38,74 @@
 </style>
 </head>
 <body>
-<h1>Call Log</h1>
+
+<div class="head">
+  <h1>Call Log</h1>
+  <button id="toggle">Business info</button>
+</div>
 <p class="sub">Appointments and summaries from the phone agent.</p>
+
+<div class="panel" id="panel" hidden>
+  <label for="bname">Business name</label>
+  <input id="bname" placeholder="Ditto Plumbing" />
+  <p class="hint">Used in the greeting: "Thanks for calling ___."</p>
+
+  <label for="binfo">What the agent should know</label>
+  <textarea id="binfo" placeholder="We repair garage doors in Utah County. Open Monday to Friday, eight to six, closed weekends. Service call is $89. We do not service commercial buildings."></textarea>
+  <p class="hint">Plain sentences. Hours, prices, service area, what you don't do. The agent answers
+     callers from this and says it will have someone confirm anything not covered here.</p>
+
+  <label for="pw">Admin password</label>
+  <input id="pw" type="password" placeholder="ADMIN_PASSWORD from Netlify" />
+
+  <div class="row">
+    <button class="primary" id="save">Save</button>
+    <span class="status" id="status"></span>
+  </div>
+</div>
+
 <div id="list">Loading…</div>
 
 <script>
+const $ = (id) => document.getElementById(id);
 const fmt = (iso) => new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 const esc = (s) => String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
 
-async function load() {
+const remembered = (() => { try { return localStorage.getItem("pw") || ""; } catch { return ""; } })();
+$("pw").value = remembered;
+
+$("toggle").onclick = () => { $("panel").hidden = !$("panel").hidden; };
+
+async function loadConfig() {
+  const c = await fetch("/api/config").then((r) => r.json());
+  $("bname").value = c.name || "";
+  $("binfo").value = c.info || "";
+}
+
+$("save").onclick = async () => {
+  const status = $("status");
+  status.className = "status";
+  status.textContent = "Saving…";
+
+  const res = await fetch("/api/config", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-admin-password": $("pw").value },
+    body: JSON.stringify({ name: $("bname").value, info: $("binfo").value }),
+  });
+  const body = await res.json().catch(() => ({}));
+
+  if (res.ok) {
+    try { localStorage.setItem("pw", $("pw").value); } catch {}
+    status.textContent = "Saved. Live on the next call.";
+  } else {
+    status.className = "status err";
+    status.textContent = body.error || `Failed (${res.status})`;
+  }
+};
+
+async function loadCalls() {
   const calls = await fetch("/api/calls").then((r) => r.json());
-  const list = document.getElementById("list");
+  const list = $("list");
 
   if (!calls.length) {
     list.innerHTML = '<p class="none">No calls yet. Call the number to create one.</p>';
@@ -61,8 +133,9 @@ async function load() {
     </div>`).join("");
 }
 
-load();
-setInterval(load, 10000);
+loadConfig();
+loadCalls();
+setInterval(loadCalls, 10000);
 </script>
 </body>
 </html>

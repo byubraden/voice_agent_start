@@ -1,19 +1,25 @@
-import { nextTurn } from "../../lib/agent.mjs";
+import { nextTurn, emptySlots } from "../../lib/agent.mjs";
 import { loadSession, saveSession } from "../../lib/store.mjs";
+import { finalize } from "../../lib/finalize.mjs";
 import { ask, sayAndHangUp, formData } from "../../lib/twiml.mjs";
 
-export default async (req) => {
+export default async (req, context) => {
   const form = await formData(req);
   const callSid = form.get("CallSid");
   const speech = (form.get("SpeechResult") || "").trim();
 
   const session = await loadSession(callSid);
-  if (speech) session.history.push({ role: "user", content: speech });
+  session.history.push({
+    role: "user",
+    content: speech || "(the caller said nothing — check if they are still there)",
+  });
 
   let reply;
   let done = false;
   try {
-    ({ reply, done } = await nextTurn(session.history));
+    const turn = await nextTurn(session.history, session.slots || emptySlots());
+    ({ reply, done } = turn);
+    session.slots = turn.slots;
     session.failures = 0;
   } catch (err) {
     console.error("agent turn failed", err);
@@ -29,7 +35,15 @@ export default async (req) => {
   session.history.push({ role: "assistant", content: reply });
   await saveSession(callSid, session);
 
-  return done ? sayAndHangUp(reply) : ask(reply);
+  if (!done) return ask(reply);
+
+  // Write the record ourselves rather than relying on the status webhook being
+  // configured. waitUntil lets the caller hear the goodbye while this runs.
+  const saving = finalize(callSid, session, { from: form.get("From") || "" });
+  if (context?.waitUntil) context.waitUntil(saving);
+  else await saving;
+
+  return sayAndHangUp(reply);
 };
 
 export const config = { path: "/turn" };
