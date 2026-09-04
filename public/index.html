@@ -3,96 +3,188 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Miester's Massage Spa Call Log</title>
+<title>Miester's Massage Spa Scheduling Dashboard</title>
 <style>
   :root {
     color-scheme: light;
-    --bg: #fbfaf7;
-    --ink: #211f1c;
-    --muted: #6d6a62;
-    --line: #ded8cd;
+    --bg: #f6f7f4;
+    --ink: #202321;
+    --muted: #66706a;
+    --line: #d9ded7;
     --panel: #ffffff;
-    --accent: #7a5c48;
-    --wash: #f1ebe2;
+    --accent: #315f4a;
+    --accent-2: #8a5b3d;
+    --wash: #eef3ed;
+    --soft: #f8f3ed;
+    --ok: #246b4b;
   }
   * { box-sizing: border-box; }
   body {
-    font: 15px/1.5 system-ui, sans-serif;
+    font: 14px/1.45 system-ui, sans-serif;
     margin: 0;
-    padding: 36px 20px;
     color: var(--ink);
     background: var(--bg);
   }
-  main { max-width: 900px; margin: 0 auto; }
-  header { border-bottom: 1px solid var(--line); padding-bottom: 20px; margin-bottom: 22px; }
+  .shell { min-height: 100vh; }
+  .bar {
+    height: 64px;
+    border-bottom: 1px solid var(--line);
+    background: rgba(255,255,255,.92);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    padding: 0 28px;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .mark { width: 34px; height: 34px; border-radius: 8px; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 700; }
+  .brand strong { display: block; line-height: 1.1; }
+  .brand span { color: var(--muted); font-size: 12px; }
+  .status { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .dot { width: 8px; height: 8px; border-radius: 99px; background: var(--ok); box-shadow: 0 0 0 3px rgba(36,107,75,.12); }
+  main { max-width: 1180px; margin: 0 auto; padding: 28px; }
+  .heading { display: flex; justify-content: space-between; gap: 20px; align-items: end; margin-bottom: 20px; }
   .eyebrow { color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 6px; }
-  h1 { font-size: 28px; line-height: 1.15; margin: 0 0 6px; }
-  .sub { color: var(--muted); margin: 0; max-width: 620px; }
-  .stats { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0 0; }
-  .stat { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 8px 12px; min-width: 130px; }
-  .stat b { display: block; font-size: 20px; line-height: 1.1; }
-  .stat span { color: var(--muted); font-size: 12px; }
-  .call { border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 14px; background: var(--panel); }
-  .top { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; }
-  .name { font-weight: 600; }
+  h1 { font-size: 30px; line-height: 1.15; margin: 0; }
+  .sub { color: var(--muted); margin: 8px 0 0; max-width: 680px; }
+  .date { color: var(--muted); font-size: 13px; text-align: right; }
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .stat { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 14px; min-height: 92px; }
+  .stat b { display: block; font-size: 26px; line-height: 1.1; margin-bottom: 10px; }
+  .stat span { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .grid { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; align-items: start; }
+  .panel { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+  .panel-head { padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+  .panel-head h2 { font-size: 15px; margin: 0; }
+  .queue { padding: 10px; display: grid; gap: 8px; }
+  .queue-item { padding: 10px; border-radius: 7px; background: var(--wash); display: flex; justify-content: space-between; gap: 10px; }
+  .queue-item span { color: var(--muted); font-size: 12px; }
+  .list { display: grid; gap: 10px; padding: 12px; }
+  .call { border: 1px solid var(--line); border-radius: 8px; padding: 14px; background: #fff; }
+  .top { display: grid; grid-template-columns: minmax(150px, 1fr) minmax(170px, auto) auto; gap: 12px; align-items: center; }
+  .name { font-weight: 700; }
   .when { color: var(--muted); font-size: 13px; }
-  .appt { margin: 10px 0; padding: 8px 12px; border-radius: 6px; background: var(--wash); }
-  .appt b { font-weight: 600; }
+  .badge { border: 1px solid rgba(49,95,74,.25); color: var(--accent); background: var(--wash); border-radius: 999px; padding: 4px 9px; font-size: 12px; font-weight: 700; justify-self: end; }
+  .appt { margin: 12px 0; padding: 10px 12px; border-radius: 7px; background: var(--soft); display: grid; gap: 4px; }
+  .appt b { font-weight: 700; }
+  .summary { color: #343833; }
   .none { color: var(--muted); font-style: italic; }
   details { margin-top: 10px; }
-  summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  summary { cursor: pointer; color: var(--accent); font-size: 13px; font-weight: 700; }
   .line { margin: 6px 0; }
   .line span { color: var(--muted); }
-  @media (max-width: 540px) {
-    body { padding: 24px 14px; }
-    h1 { font-size: 24px; }
-    .stat { flex: 1 1 130px; }
+  .empty { border: 1px dashed var(--line); border-radius: 8px; padding: 28px; background: var(--panel); text-align: center; }
+  @media (max-width: 840px) {
+    .bar { padding: 0 16px; }
+    main { padding: 20px 14px; }
+    .heading { display: block; }
+    .date { text-align: left; margin-top: 10px; }
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid { grid-template-columns: 1fr; }
+    .top { grid-template-columns: 1fr; }
+    .badge { justify-self: start; }
+  }
+  @media (max-width: 520px) {
+    .status { display: none; }
+    .stats { grid-template-columns: 1fr; }
+    h1 { font-size: 25px; }
   }
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <p class="eyebrow">Miester's Massage Spa</p>
-    <h1>Massage Appointments</h1>
-    <p class="sub">New Swedish, deep tissue, prenatal, couples, hot stone, and sports recovery massage appointments from the phone receptionist.</p>
+<div class="shell">
+  <div class="bar">
+    <div class="brand">
+      <div class="mark">M</div>
+      <div>
+        <strong>Miester's Massage Spa</strong>
+        <span>Scheduling Dashboard</span>
+      </div>
+    </div>
+    <div class="status"><span class="dot"></span><span>Auto-refresh every ten seconds</span></div>
+  </div>
+  <main>
+    <section class="heading">
+      <div>
+        <p class="eyebrow">Appointment Pipeline</p>
+        <h1>Massage Appointments</h1>
+        <p class="sub">Review incoming call requests, confirm massage details, and follow up on scheduling gaps.</p>
+      </div>
+      <div class="date" id="today"></div>
+    </section>
     <div class="stats" id="stats"></div>
-  </header>
-  <div id="list">Loading...</div>
-</main>
+    <section class="grid">
+      <aside class="panel">
+        <div class="panel-head"><h2>Queue Health</h2></div>
+        <div class="queue" id="queue"></div>
+      </aside>
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Recent Appointment Requests</h2>
+          <span class="when">Live call data</span>
+        </div>
+        <div class="list" id="list">Loading...</div>
+      </section>
+    </section>
+  </main>
+</div>
 
 <script>
 const fmt = (iso) => new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+const today = () => new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
 const esc = (s) => String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+const average = (calls) => calls.length
+  ? Math.round(calls.reduce((sum, c) => sum + Number(c.duration_seconds || 0), 0) / calls.length)
+  : 0;
 
 async function load() {
   const calls = await fetch("/api/calls").then((r) => r.json());
   const list = document.getElementById("list");
   const stats = document.getElementById("stats");
+  const queue = document.getElementById("queue");
+  document.getElementById("today").textContent = today();
   const booked = calls.filter((c) => c.booked || c.appointment).length;
+  const missingTime = calls.filter((c) => !c.appointment).length;
+  const rate = calls.length ? Math.round((booked / calls.length) * 100) : 0;
+  const avgCall = average(calls);
 
   stats.innerHTML = `
-    <div class="stat"><b>${calls.length}</b><span>Total calls</span></div>
-    <div class="stat"><b>${booked}</b><span>Massage appointments</span></div>
+    <div class="stat"><b>${calls.length}</b><span>Total Calls</span></div>
+    <div class="stat"><b>${booked}</b><span>Massage Appointments</span></div>
+    <div class="stat"><b>${rate}%</b><span>Request Rate</span></div>
+    <div class="stat"><b>${avgCall}s</b><span>Avg. Call</span></div>
+  `;
+
+  queue.innerHTML = `
+    <div class="queue-item"><strong>${booked}</strong><span>Ready to confirm</span></div>
+    <div class="queue-item"><strong>${missingTime}</strong><span>Need follow-up</span></div>
+    <div class="queue-item"><strong>${calls.length}</strong><span>Recent conversations</span></div>
   `;
 
   if (!calls.length) {
-    list.innerHTML = '<p class="none">No massage calls yet. Call the number to create the first appointment request.</p>';
+    list.innerHTML = '<div class="empty"><strong>No massage appointments yet.</strong><br><span class="none">Call the Twilio number to create the first scheduling request.</span></div>';
     return;
   }
 
   list.innerHTML = calls.map((c) => `
     <div class="call">
       <div class="top">
-        <span class="name">${esc(c.caller_name || "Unknown caller")}</span>
-        <span class="when">${esc(c.from)} · ${fmt(c.ended_at)} · ${c.duration_seconds}s</span>
+        <div>
+          <div class="name">${esc(c.caller_name || "Unknown caller")}</div>
+          <div class="when">${esc(c.from || "No caller ID")}</div>
+        </div>
+        <span class="when">${fmt(c.ended_at)} · ${c.duration_seconds}s call</span>
+        <span class="badge">${c.appointment ? "Ready to confirm" : "Follow up"}</span>
       </div>
       <div class="appt">
         ${c.appointment
           ? `<b>Requested massage:</b> ${esc(c.appointment)}${c.service ? ` - ${esc(c.service)}` : ""}`
           : '<span class="none">No massage appointment requested</span>'}
       </div>
-      <div>${esc(c.summary)}</div>
+      <div class="summary">${esc(c.summary || "No summary captured.")}</div>
       <details>
         <summary>Transcript</summary>
         ${(c.transcript || []).map((m) =>
