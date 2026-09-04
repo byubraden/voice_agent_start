@@ -9,10 +9,14 @@ export default async (req) => {
   const business = await getConfig();
   const greeting = `Thanks for calling ${business.name}. How can I help you today?`;
 
+  const from = form.get("From") || "";
+
   await saveSession(callSid, {
-    from: form.get("From") || "",
+    from,
     started_at: new Date().toISOString(),
-    slots: emptySlots(),
+    // Caller ID is already a callback number. Prefilling it stops the agent from
+    // demanding a number the phone company handed us before the caller said a word.
+    slots: { ...emptySlots(), callback: from },
     history: [{ role: "assistant", content: greeting }],
   });
 
