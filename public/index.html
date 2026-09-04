@@ -3,29 +3,63 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Call Log</title>
+<title>Miester's Massage Spa Call Log</title>
 <style>
-  :root { color-scheme: light dark; --line: #d9d9de; --muted: #6b7280; }
-  body { font: 15px/1.5 system-ui, sans-serif; margin: 0; padding: 32px 20px; max-width: 760px; }
-  h1 { font-size: 20px; margin: 0 0 4px; }
-  .sub { color: var(--muted); margin: 0 0 28px; }
-  .call { border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  :root {
+    color-scheme: light;
+    --bg: #fbfaf7;
+    --ink: #211f1c;
+    --muted: #6d6a62;
+    --line: #ded8cd;
+    --panel: #ffffff;
+    --accent: #7a5c48;
+    --wash: #f1ebe2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font: 15px/1.5 system-ui, sans-serif;
+    margin: 0;
+    padding: 36px 20px;
+    color: var(--ink);
+    background: var(--bg);
+  }
+  main { max-width: 900px; margin: 0 auto; }
+  header { border-bottom: 1px solid var(--line); padding-bottom: 20px; margin-bottom: 22px; }
+  .eyebrow { color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 6px; }
+  h1 { font-size: 28px; line-height: 1.15; margin: 0 0 6px; }
+  .sub { color: var(--muted); margin: 0; max-width: 620px; }
+  .stats { display: flex; gap: 10px; flex-wrap: wrap; margin: 18px 0 0; }
+  .stat { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 8px 12px; min-width: 130px; }
+  .stat b { display: block; font-size: 20px; line-height: 1.1; }
+  .stat span { color: var(--muted); font-size: 12px; }
+  .call { border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin-bottom: 14px; background: var(--panel); }
   .top { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; }
   .name { font-weight: 600; }
   .when { color: var(--muted); font-size: 13px; }
-  .appt { margin: 10px 0; padding: 8px 12px; border-radius: 6px; background: rgba(127,127,127,.12); }
+  .appt { margin: 10px 0; padding: 8px 12px; border-radius: 6px; background: var(--wash); }
   .appt b { font-weight: 600; }
   .none { color: var(--muted); font-style: italic; }
   details { margin-top: 10px; }
   summary { cursor: pointer; color: var(--muted); font-size: 13px; }
   .line { margin: 6px 0; }
   .line span { color: var(--muted); }
+  @media (max-width: 540px) {
+    body { padding: 24px 14px; }
+    h1 { font-size: 24px; }
+    .stat { flex: 1 1 130px; }
+  }
 </style>
 </head>
 <body>
-<h1>Call Log</h1>
-<p class="sub">Appointments and summaries from the phone agent.</p>
-<div id="list">Loading…</div>
+<main>
+  <header>
+    <p class="eyebrow">Miester's Massage Spa</p>
+    <h1>Massage Appointments</h1>
+    <p class="sub">New Swedish, deep tissue, prenatal, couples, hot stone, and sports recovery massage appointments from the phone receptionist.</p>
+    <div class="stats" id="stats"></div>
+  </header>
+  <div id="list">Loading...</div>
+</main>
 
 <script>
 const fmt = (iso) => new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
@@ -34,9 +68,16 @@ const esc = (s) => String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">":
 async function load() {
   const calls = await fetch("/api/calls").then((r) => r.json());
   const list = document.getElementById("list");
+  const stats = document.getElementById("stats");
+  const booked = calls.filter((c) => c.booked || c.appointment).length;
+
+  stats.innerHTML = `
+    <div class="stat"><b>${calls.length}</b><span>Total calls</span></div>
+    <div class="stat"><b>${booked}</b><span>Massage appointments</span></div>
+  `;
 
   if (!calls.length) {
-    list.innerHTML = '<p class="none">No calls yet. Call the number to create one.</p>';
+    list.innerHTML = '<p class="none">No massage calls yet. Call the number to create the first appointment request.</p>';
     return;
   }
 
@@ -48,8 +89,8 @@ async function load() {
       </div>
       <div class="appt">
         ${c.appointment
-          ? `<b>Appointment:</b> ${esc(c.appointment)}${c.service ? ` — ${esc(c.service)}` : ""}`
-          : '<span class="none">No appointment booked</span>'}
+          ? `<b>Requested massage:</b> ${esc(c.appointment)}${c.service ? ` - ${esc(c.service)}` : ""}`
+          : '<span class="none">No massage appointment requested</span>'}
       </div>
       <div>${esc(c.summary)}</div>
       <details>
