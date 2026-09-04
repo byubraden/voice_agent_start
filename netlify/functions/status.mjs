@@ -6,8 +6,8 @@ export default async (req) => {
   const form = await formData(req);
   const callSid = form.get("CallSid");
 
-  if (form.get("CallStatus") !== "completed") return new Response("", { status: 204 });
-  if (await isFinalized(callSid)) return new Response("", { status: 204 });
+  if (form.get("CallStatus") !== "completed") return new Response("ok");
+  if (await isFinalized(callSid)) return new Response("ok");
 
   const session = await loadSession(callSid);
   let outcome = { caller_name: "", service: "", appointment: "", summary: "", booked: false };
@@ -27,7 +27,7 @@ export default async (req) => {
     ...outcome,
   });
 
-  return new Response("", { status: 204 });
+  return new Response("ok");
 };
 
 export const config = { path: "/status" };
