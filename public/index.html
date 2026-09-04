@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Miester's Massage Spa Scheduling Dashboard</title>
+<title>Scheduling Dashboard</title>
 <style>
   :root {
     color-scheme: light;
@@ -17,6 +17,7 @@
     --wash: #eef3ed;
     --soft: #f8f3ed;
     --ok: #246b4b;
+    --err: #b3261e;
   }
   * { box-sizing: border-box; }
   body {
@@ -25,6 +26,17 @@
     color: var(--ink);
     background: var(--bg);
   }
+  button, input, textarea { font: inherit; }
+  button {
+    cursor: pointer;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: inherit;
+    padding: 7px 13px;
+    white-space: nowrap;
+  }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
   .shell { min-height: 100vh; }
   .bar {
     height: 64px;
@@ -41,15 +53,16 @@
   }
   .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
   .mark { width: 34px; height: 34px; border-radius: 8px; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 700; }
-  .brand strong { display: block; line-height: 1.1; }
+  .brand strong { display: block; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .brand span { color: var(--muted); font-size: 12px; }
-  .status { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .status-line { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; white-space: nowrap; }
   .dot { width: 8px; height: 8px; border-radius: 99px; background: var(--ok); box-shadow: 0 0 0 3px rgba(36,107,75,.12); }
   main { max-width: 1180px; margin: 0 auto; padding: 28px; }
   .heading { display: flex; justify-content: space-between; gap: 20px; align-items: end; margin-bottom: 20px; }
   .eyebrow { color: var(--accent); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 6px; }
   h1 { font-size: 30px; line-height: 1.15; margin: 0; }
   .sub { color: var(--muted); margin: 8px 0 0; max-width: 680px; }
+  .actions { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
   .date { color: var(--muted); font-size: 13px; text-align: right; }
   .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
   .stat { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 14px; min-height: 92px; }
@@ -57,6 +70,22 @@
   .stat span { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
   .grid { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; align-items: start; }
   .panel { border: 1px solid var(--line); border-radius: 8px; background: var(--panel); }
+  .settings { padding: 18px; margin-bottom: 18px; }
+  .settings label { display: block; font-weight: 700; margin: 14px 0 4px; }
+  .settings label:first-of-type { margin-top: 0; }
+  .settings input, .settings textarea {
+    width: 100%;
+    padding: 9px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--bg);
+    color: inherit;
+  }
+  .settings textarea { min-height: 150px; resize: vertical; }
+  .hint { color: var(--muted); font-size: 13px; margin: 5px 0 0; }
+  .row { display: flex; gap: 12px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
+  .save-status { font-size: 13px; color: var(--muted); }
+  .save-status.err { color: var(--err); }
   .panel-head { padding: 14px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; align-items: center; }
   .panel-head h2 { font-size: 15px; margin: 0; }
   .queue { padding: 10px; display: grid; gap: 8px; }
@@ -81,14 +110,15 @@
     .bar { padding: 0 16px; }
     main { padding: 20px 14px; }
     .heading { display: block; }
-    .date { text-align: left; margin-top: 10px; }
+    .actions { align-items: flex-start; margin-top: 12px; }
+    .date { text-align: left; }
     .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .grid { grid-template-columns: 1fr; }
     .top { grid-template-columns: 1fr; }
     .badge { justify-self: start; }
   }
   @media (max-width: 520px) {
-    .status { display: none; }
+    .status-line { display: none; }
     .stats { grid-template-columns: 1fr; }
     h1 { font-size: 25px; }
   }
@@ -100,11 +130,11 @@
     <div class="brand">
       <div class="mark">M</div>
       <div>
-        <strong>Miester's Massage Spa</strong>
+        <strong id="brandName">Loading...</strong>
         <span>Scheduling Dashboard</span>
       </div>
     </div>
-    <div class="status"><span class="dot"></span><span>Auto-refresh every ten seconds</span></div>
+    <div class="status-line"><span class="dot"></span><span>Auto-refresh every ten seconds</span></div>
   </div>
   <main>
     <section class="heading">
@@ -113,8 +143,30 @@
         <h1>Massage Appointments</h1>
         <p class="sub">Review incoming call requests, confirm massage details, and follow up on scheduling gaps.</p>
       </div>
-      <div class="date" id="today"></div>
+      <div class="actions">
+        <button id="toggle">Business info</button>
+        <div class="date" id="today"></div>
+      </div>
     </section>
+
+    <section class="panel settings" id="panel" hidden>
+      <label for="bname">Business name</label>
+      <input id="bname" />
+      <p class="hint">Used in the greeting and dashboard header.</p>
+
+      <label for="binfo">What the agent should know</label>
+      <textarea id="binfo"></textarea>
+      <p class="hint">Plain sentences. Services, hours, prices, and anything the agent should not promise.</p>
+
+      <label for="pw">Admin password</label>
+      <input id="pw" type="password" placeholder="ADMIN_PASSWORD from Netlify" />
+
+      <div class="row">
+        <button class="primary" id="save">Save</button>
+        <span class="save-status" id="status"></span>
+      </div>
+    </section>
+
     <div class="stats" id="stats"></div>
     <section class="grid">
       <aside class="panel">
@@ -133,6 +185,7 @@
 </div>
 
 <script>
+const $ = (id) => document.getElementById(id);
 const fmt = (iso) => new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 const today = () => new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
 const esc = (s) => String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
@@ -140,41 +193,71 @@ const average = (calls) => calls.length
   ? Math.round(calls.reduce((sum, c) => sum + Number(c.duration_seconds || 0), 0) / calls.length)
   : 0;
 
-async function load() {
+try { $("pw").value = localStorage.getItem("pw") || ""; } catch {}
+
+$("toggle").onclick = () => { $("panel").hidden = !$("panel").hidden; };
+
+async function loadConfig() {
+  const c = await fetch("/api/config").then((r) => r.json());
+  $("brandName").textContent = c.name || "Scheduling";
+  $("bname").value = c.name || "";
+  $("binfo").value = c.info || "";
+}
+
+$("save").onclick = async () => {
+  const status = $("status");
+  status.className = "save-status";
+  status.textContent = "Saving...";
+
+  const res = await fetch("/api/config", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-admin-password": $("pw").value },
+    body: JSON.stringify({ name: $("bname").value, info: $("binfo").value }),
+  });
+  const body = await res.json().catch(() => ({}));
+
+  if (res.ok) {
+    try { localStorage.setItem("pw", $("pw").value); } catch {}
+    status.textContent = "Saved. Live on the next call.";
+    $("brandName").textContent = body.name || "Scheduling";
+  } else {
+    status.className = "save-status err";
+    status.textContent = body.error || `Failed (${res.status})`;
+  }
+};
+
+async function loadCalls() {
   const calls = await fetch("/api/calls").then((r) => r.json());
-  const list = document.getElementById("list");
-  const stats = document.getElementById("stats");
-  const queue = document.getElementById("queue");
-  document.getElementById("today").textContent = today();
   const booked = calls.filter((c) => c.booked || c.appointment).length;
   const missingTime = calls.filter((c) => !c.appointment).length;
   const rate = calls.length ? Math.round((booked / calls.length) * 100) : 0;
   const avgCall = average(calls);
+  $("today").textContent = today();
 
-  stats.innerHTML = `
+  $("stats").innerHTML = `
     <div class="stat"><b>${calls.length}</b><span>Total Calls</span></div>
     <div class="stat"><b>${booked}</b><span>Massage Appointments</span></div>
     <div class="stat"><b>${rate}%</b><span>Request Rate</span></div>
     <div class="stat"><b>${avgCall}s</b><span>Avg. Call</span></div>
   `;
 
-  queue.innerHTML = `
+  $("queue").innerHTML = `
     <div class="queue-item"><strong>${booked}</strong><span>Ready to confirm</span></div>
     <div class="queue-item"><strong>${missingTime}</strong><span>Need follow-up</span></div>
     <div class="queue-item"><strong>${calls.length}</strong><span>Recent conversations</span></div>
   `;
 
   if (!calls.length) {
-    list.innerHTML = '<div class="empty"><strong>No massage appointments yet.</strong><br><span class="none">Call the Twilio number to create the first scheduling request.</span></div>';
+    $("list").innerHTML = '<div class="empty"><strong>No massage appointments yet.</strong><br><span class="none">Call the Twilio number to create the first scheduling request.</span></div>';
     return;
   }
 
-  list.innerHTML = calls.map((c) => `
+  $("list").innerHTML = calls.map((c) => `
     <div class="call">
       <div class="top">
         <div>
           <div class="name">${esc(c.caller_name || "Unknown caller")}</div>
-          <div class="when">${esc(c.from || "No caller ID")}</div>
+          <div class="when">${esc(c.callback || c.from || "No caller ID")}</div>
         </div>
         <span class="when">${fmt(c.ended_at)} · ${c.duration_seconds}s call</span>
         <span class="badge">${c.appointment ? "Ready to confirm" : "Follow up"}</span>
@@ -194,8 +277,9 @@ async function load() {
     </div>`).join("");
 }
 
-load();
-setInterval(load, 10000);
+loadConfig();
+loadCalls();
+setInterval(loadCalls, 10000);
 </script>
 </body>
 </html>

@@ -2,19 +2,26 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { businessName } from "../lib/agent.mjs";
+import { defaults } from "../lib/config.mjs";
 
-test("defaults the demo business to Miester's Massage Spa", () => {
+test("a fresh deploy starts as the massage demo", () => {
   delete process.env.BUSINESS_NAME;
+  delete process.env.BUSINESS_INFO;
 
-  assert.equal(businessName(), "Miester's Massage Spa");
+  assert.equal(defaults().name, "Miester's Massage Spa");
+  assert.match(defaults().info, /deep tissue/i);
+  assert.match(defaults().info, /sixty or ninety minutes/i);
 });
 
-test("call log page uses massage demo branding", async () => {
+test("business details are editable, not hardcoded in the page", async () => {
   const html = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
 
-  assert.match(html, /Miester's Massage Spa/);
-  assert.match(html, /massage appointments/i);
+  // The heading is filled in from /api/config at runtime, so the spa name must not be
+  // baked into the markup — otherwise editing it in the settings panel changes the
+  // agent but leaves the page still advertising the old business.
+  assert.doesNotMatch(html, /Miester's Massage Spa/);
+  assert.match(html, /api\/config/);
+  assert.match(html, /id="binfo"/);
 });
 
 test("call log page is positioned as a scheduling dashboard", async () => {
