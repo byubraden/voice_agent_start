@@ -20,6 +20,9 @@
     --err: #b3261e;
   }
   * { box-sizing: border-box; }
+  /* A class with an explicit display (.grid, .panel) outranks the browser's default
+     [hidden] rule, so hidden sections would still render. */
+  [hidden] { display: none !important; }
   body {
     font: 14px/1.45 system-ui, sans-serif;
     margin: 0;
@@ -109,6 +112,37 @@
   .line { margin: 6px 0; }
   .line span { color: var(--muted); }
   .empty { border: 1px dashed var(--line); border-radius: 8px; padding: 28px; background: var(--panel); text-align: center; }
+
+  .tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--panel); }
+  .tabs button { border: 0; border-radius: 0; background: transparent; padding: 7px 15px; color: var(--muted); font-weight: 700; }
+  .tabs button[aria-selected="true"] { background: var(--accent); color: #fff; }
+  .calbar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .calbar .range { font-weight: 700; }
+  .calbar .spacer { margin-left: auto; color: var(--muted); font-size: 13px; }
+  .nav { display: flex; gap: 6px; }
+  .nav button { padding: 5px 11px; }
+
+  .week { overflow-x: auto; }
+  .weekgrid { display: grid; grid-template-columns: 58px repeat(7, minmax(96px, 1fr)); min-width: 720px; }
+  .weekgrid .dayhead { padding: 8px 6px; text-align: center; border-bottom: 1px solid var(--line); border-left: 1px solid var(--line); }
+  .weekgrid .dayhead span { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+  .weekgrid .dayhead b { font-size: 17px; }
+  .weekgrid .dayhead.is-today b { background: var(--accent); color: #fff; border-radius: 99px; padding: 1px 9px; display: inline-block; }
+  .weekgrid .corner { border-bottom: 1px solid var(--line); }
+  .hours { border-right: 0; }
+  .hours div { height: 44px; font-size: 11px; color: var(--muted); text-align: right; padding-right: 7px; transform: translateY(-6px); }
+  .daycol { position: relative; border-left: 1px solid var(--line); }
+  .daycol .slot { height: 44px; border-bottom: 1px solid var(--wash); }
+  .event {
+    position: absolute; left: 3px; right: 3px; border-radius: 6px; padding: 4px 6px; overflow: hidden;
+    background: var(--accent); color: #fff; font-size: 11px; line-height: 1.25; cursor: pointer;
+    border-left: 3px solid rgba(0,0,0,.25);
+  }
+  .event.tentative { background: var(--accent-2); }
+  .event b { display: block; font-weight: 700; }
+  .unscheduled { padding: 12px 16px; border-top: 1px solid var(--line); }
+  .unscheduled h3 { font-size: 13px; margin: 0 0 8px; }
+  .chip { display: inline-block; border: 1px solid var(--line); background: var(--soft); border-radius: 99px; padding: 5px 11px; font-size: 12px; margin: 0 6px 6px 0; }
   @media (max-width: 840px) {
     .bar { padding: 0 16px; }
     main { padding: 20px 14px; }
@@ -148,6 +182,10 @@
         <p class="sub">Review incoming call requests, confirm massage details, and follow up on scheduling gaps.</p>
       </div>
       <div class="actions">
+        <div class="tabs" role="tablist">
+          <button id="tabRequests" role="tab" aria-selected="true">Requests</button>
+          <button id="tabSchedule" role="tab" aria-selected="false">Schedule</button>
+        </div>
         <button id="toggle">Business info</button>
         <div class="date" id="today"></div>
       </div>
@@ -172,7 +210,8 @@
     </section>
 
     <div class="stats" id="stats"></div>
-    <section class="grid">
+
+    <section class="grid" id="viewRequests">
       <aside class="panel">
         <div class="panel-head"><h2>Queue Health</h2></div>
         <div class="queue" id="queue"></div>
@@ -184,6 +223,20 @@
         </div>
         <div class="list" id="list">Loading...</div>
       </section>
+    </section>
+
+    <section class="panel" id="viewSchedule" hidden>
+      <div class="calbar">
+        <div class="nav">
+          <button id="calPrev" aria-label="Previous week">&lsaquo;</button>
+          <button id="calToday">Today</button>
+          <button id="calNext" aria-label="Next week">&rsaquo;</button>
+        </div>
+        <span class="range" id="calRange"></span>
+        <span class="spacer">Times the caller asked for. Nothing here is confirmed.</span>
+      </div>
+      <div class="week"><div class="weekgrid" id="calGrid"></div></div>
+      <div class="unscheduled" id="calUnscheduled"></div>
     </section>
   </main>
 </div>
@@ -256,6 +309,8 @@ $("save").onclick = async () => {
 
 async function loadCalls() {
   const calls = await fetch("/api/calls").then((r) => r.json());
+  latestCalls = calls;
+  if (!$("viewSchedule").hidden) renderSchedule();
   const booked = calls.filter((c) => c.booked || c.appointment).length;
   const missingTime = calls.filter((c) => !c.appointment).length;
   const rate = calls.length ? Math.round((booked / calls.length) * 100) : 0;
@@ -331,6 +386,95 @@ async function loadCalls() {
     };
   });
 }
+
+// ---- Schedule view -------------------------------------------------------
+// Blocks are placed from appointment_iso, which the agent resolves from what the
+// caller actually said. Anything it could not pin to a day and time shows as a chip
+// underneath rather than being silently dropped or guessed onto the grid.
+const DAY_START = 8;
+const DAY_END = 20;
+const HOUR_PX = 44;
+let weekOffset = 0;
+let latestCalls = [];
+
+const startOfWeek = (offset) => {
+  const d = new Date();
+  d.setDate(d.getDate() - d.getDay() + offset * 7);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+function renderSchedule() {
+  const start = startOfWeek(weekOffset);
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    return d;
+  });
+  const last = days[6];
+  const sameMonth = start.getMonth() === last.getMonth();
+  const mon = (d) => d.toLocaleDateString([], { month: "short" });
+  $("calRange").textContent = sameMonth
+    ? `${mon(start)} ${start.getDate()} – ${last.getDate()}`
+    : `${mon(start)} ${start.getDate()} – ${mon(last)} ${last.getDate()}`;
+
+  const todayKey = new Date().toDateString();
+  const hours = Array.from({ length: DAY_END - DAY_START }, (_, i) => DAY_START + i);
+
+  let html = '<div class="corner"></div>';
+  for (const d of days) {
+    const isToday = d.toDateString() === todayKey ? " is-today" : "";
+    html += `<div class="dayhead${isToday}">
+      <span>${d.toLocaleDateString([], { weekday: "short" })}</span><b>${d.getDate()}</b></div>`;
+  }
+  html += '<div class="hours">' +
+    hours.map((h) => `<div>${((h + 11) % 12) + 1} ${h < 12 ? "AM" : "PM"}</div>`).join("") +
+    "</div>";
+
+  for (const d of days) {
+    const events = latestCalls
+      .map((c) => ({ call: c, when: c.appointment_iso ? new Date(c.appointment_iso) : null }))
+      .filter((e) => e.when && !Number.isNaN(e.when.getTime()) && e.when.toDateString() === d.toDateString());
+
+    html += '<div class="daycol">' + hours.map(() => '<div class="slot"></div>').join("");
+    for (const { call, when } of events) {
+      const mins = (when.getHours() - DAY_START) * 60 + when.getMinutes();
+      const height = (Number(call.duration_minutes) || 60) / 60 * HOUR_PX;
+      if (mins < 0 || when.getHours() >= DAY_END) continue;
+      html += `<div class="event${call.booked ? "" : " tentative"}"
+        style="top:${(mins / 60) * HOUR_PX}px;height:${Math.max(height, 26)}px"
+        title="${esc(call.caller_name || "Unknown")} — ${esc(call.service || "massage")} — ${esc(call.appointment || "")}">
+        <b>${when.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</b>
+        ${esc(call.caller_name || "Unknown caller")}</div>`;
+    }
+    html += "</div>";
+  }
+
+  $("calGrid").innerHTML = html;
+
+  const loose = latestCalls.filter(
+    (c) => (c.appointment || c.booked) && !(c.appointment_iso && !Number.isNaN(new Date(c.appointment_iso).getTime()))
+  );
+  $("calUnscheduled").innerHTML = loose.length
+    ? `<h3>Needs a real time (${loose.length})</h3>` +
+      loose.map((c) => `<span class="chip">${esc(c.caller_name || "Unknown")} — ${esc(c.appointment || "no time given")}</span>`).join("")
+    : '<h3>Every request on file has a day and time.</h3>';
+}
+
+function showView(which) {
+  const schedule = which === "schedule";
+  $("viewSchedule").hidden = !schedule;
+  $("viewRequests").hidden = schedule;
+  $("tabSchedule").setAttribute("aria-selected", String(schedule));
+  $("tabRequests").setAttribute("aria-selected", String(!schedule));
+  if (schedule) renderSchedule();
+}
+
+$("tabSchedule").onclick = () => showView("schedule");
+$("tabRequests").onclick = () => showView("requests");
+$("calPrev").onclick = () => { weekOffset -= 1; renderSchedule(); };
+$("calNext").onclick = () => { weekOffset += 1; renderSchedule(); };
+$("calToday").onclick = () => { weekOffset = 0; renderSchedule(); };
 
 loadConfig();
 loadCalls();
