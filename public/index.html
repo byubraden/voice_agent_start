@@ -26,7 +26,7 @@
     color: var(--ink);
     background: var(--bg);
   }
-  button, input, textarea { font: inherit; }
+  button, input, select, textarea { font: inherit; }
   button {
     cursor: pointer;
     border-radius: 8px;
@@ -99,6 +99,9 @@
   .badge { border: 1px solid rgba(49,95,74,.25); color: var(--accent); background: var(--wash); border-radius: 999px; padding: 4px 9px; font-size: 12px; font-weight: 700; justify-self: end; }
   .appt { margin: 12px 0; padding: 10px 12px; border-radius: 7px; background: var(--soft); display: grid; gap: 4px; }
   .appt b { font-weight: 700; }
+  .calendar { display: grid; grid-template-columns: minmax(180px, 1fr) 120px auto; gap: 10px; align-items: end; margin-top: 12px; }
+  .calendar label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+  .calendar input, .calendar select { min-height: 36px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); padding: 7px 8px; }
   .summary { color: #343833; }
   .none { color: var(--muted); font-style: italic; }
   details { margin-top: 10px; }
@@ -115,6 +118,7 @@
     .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .grid { grid-template-columns: 1fr; }
     .top { grid-template-columns: 1fr; }
+    .calendar { grid-template-columns: 1fr; }
     .badge { justify-self: start; }
   }
   @media (max-width: 520px) {
@@ -189,9 +193,33 @@ const $ = (id) => document.getElementById(id);
 const fmt = (iso) => new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 const today = () => new Date().toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" });
 const esc = (s) => String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;" }[c]));
+const idSafe = (s) => String(s || "").replace(/[^a-zA-Z0-9_-]/g, "_");
 const average = (calls) => calls.length
   ? Math.round(calls.reduce((sum, c) => sum + Number(c.duration_seconds || 0), 0) / calls.length)
   : 0;
+const compactGoogleDate = (date) => date.toISOString().replace(/[-:]|\.\d{3}/g, "");
+
+function calendarUrl(call, startValue, durationMinutes) {
+  const start = new Date(startValue);
+  if (Number.isNaN(start.getTime())) return "";
+  const end = new Date(start.getTime() + Number(durationMinutes || 60) * 60000);
+  const title = `${call.service || "Massage appointment"} - ${call.caller_name || "Client"}`;
+  const details = [
+    `Caller: ${call.caller_name || "Unknown caller"}`,
+    `Phone: ${call.callback || call.from || "Not provided"}`,
+    `Requested: ${call.appointment || "Not provided"}`,
+    `Service: ${call.service || "Not provided"}`,
+    "",
+    call.summary || "",
+  ].join("\n");
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: title,
+    dates: `${compactGoogleDate(start)}/${compactGoogleDate(end)}`,
+    details,
+  });
+  return `https://calendar.google.com/calendar/render?${params}`;
+}
 
 try { $("pw").value = localStorage.getItem("pw") || ""; } catch {}
 
@@ -252,7 +280,9 @@ async function loadCalls() {
     return;
   }
 
-  $("list").innerHTML = calls.map((c) => `
+  $("list").innerHTML = calls.map((c, i) => {
+    const id = idSafe(c.id || `call_${i}`);
+    return `
     <div class="call">
       <div class="top">
         <div>
@@ -267,6 +297,15 @@ async function loadCalls() {
           ? `<b>Requested massage:</b> ${esc(c.appointment)}${c.service ? ` - ${esc(c.service)}` : ""}`
           : '<span class="none">No massage appointment requested</span>'}
       </div>
+      <div class="calendar">
+        <label for="cal-start-${id}">Calendar start<input id="cal-start-${id}" type="datetime-local" /></label>
+        <label for="cal-duration-${id}">Duration<select id="cal-duration-${id}">
+          <option value="60">60 min</option>
+          <option value="90">90 min</option>
+          <option value="120">120 min</option>
+        </select></label>
+        <button class="primary" data-calendar="${id}">Add to Google Calendar</button>
+      </div>
       <div class="summary">${esc(c.summary || "No summary captured.")}</div>
       <details>
         <summary>Transcript</summary>
@@ -274,7 +313,23 @@ async function loadCalls() {
           `<div class="line"><span>${m.role === "user" ? "Caller" : "Agent"}:</span> ${esc(m.content)}</div>`
         ).join("")}
       </details>
-    </div>`).join("");
+    </div>`;
+  }).join("");
+
+  calls.forEach((c, i) => {
+    const id = idSafe(c.id || `call_${i}`);
+    const button = document.querySelector(`[data-calendar="${id}"]`);
+    if (!button) return;
+    button.onclick = () => {
+      const url = calendarUrl(c, $(`cal-start-${id}`).value, $(`cal-duration-${id}`).value);
+      if (!url) {
+        button.textContent = "Pick a start time first";
+        setTimeout(() => { button.textContent = "Add to Google Calendar"; }, 1800);
+        return;
+      }
+      window.open(url, "_blank", "noopener");
+    };
+  });
 }
 
 loadConfig();
